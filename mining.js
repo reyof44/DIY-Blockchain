@@ -18,9 +18,22 @@ class MineableTransaction {
    * signer.
    */
   constructor(privateKey, recipient = null, amount) {
-    // Enter your solution here
+   const publicKey = signing.getPublicKey(privateKey);
+     this.amount = amount;
 
-  }
+     if (recipient !== null) {
+       this.source = publicKey;
+       this.recipient = recipient;
+     } else {
+       this.source = null;
+       this.recipient = publicKey;
+     }
+
+     const toSign = this.source + this.recipient + amount;
+     this.signature = signing.sign(privateKey, toSign);
+  
+}
+
 }
 
 /**
@@ -34,9 +47,14 @@ class MineableBlock extends Block {
    * become valid after it is mined.
    */
   constructor(transactions, previousHash) {
+    constructor(transactions, previousHash) {
+      super(transactions, previousHash);
+      this.hash = '';
+      this.nonce = null;
     // Your code here
 
   }
+}
 }
 
 /**
@@ -61,10 +79,21 @@ class MineableChain extends Blockchain {
    *   You'll also need some sort of property to store pending transactions.
    *   This will only be used internally.
    */
-  constructor() {
+  
     // Your code here
+    constructor() {
+      super();
+      const genesis = new MineableBlock([], null);
+      this.blocks = [ genesis ];
+      // Your code here
+ 
+      this.difficulty = 2;
+      this.reward = 100;
+ 
+      this._pending = [];
+    }
 
-  }
+  
 
   /**
    * No more adding blocks directly.
@@ -79,6 +108,7 @@ class MineableChain extends Blockchain {
    */
   addTransaction(transaction) {
     // Your code here
+    this._pending.push(transaction);
 
   }
 
@@ -98,6 +128,21 @@ class MineableChain extends Blockchain {
    */
   mine(privateKey) {
     // Your code here
+    const reward = new MineableTransaction(privateKey, null, this.reward);
+     const pendingTransactions = this._pending.concat(reward);
+     const previousHash = this.getHeadBlock().hash;
+
+     const block = new Block(pendingTransactions, previousHash);
+     const zeros = '0'.repeat(this.difficulty);
+     let nonce = 0;
+
+     while (block.hash.slice(0, this.difficulty) !== zeros) {
+       block.calculateHash(nonce);
+       nonce++;
+     }
+
+     this.blocks.push(block);
+     this._pending = [];
 
   }
 }
@@ -119,7 +164,47 @@ class MineableChain extends Blockchain {
  */
 const isValidMineableChain = blockchain => {
   // Your code here
+  const zeros = '0'.repeat(blockchain.difficulty);
+  const { blocks } = blockchain;
 
+  // All blocks other than genesis begin with the right number of zeros
+  if (blocks.slice(1).some(b => b.hash.slice(0, zeros.length) !== zeros)) {
+    return false;
+  }
+
+  const balances = {};
+
+  for (const { transactions } of blocks) {
+    const rewards = transactions.filter(t => !t.source);
+
+    // The block has no more than one reward transaction
+    if (rewards.length > 1) {
+      return false;
+    }
+
+    // If present, the reward transaction has the correct amount
+    if (rewards[0] && rewards[0].amount !== blockchain.reward) {
+      return false;
+    }
+
+    // Each transaction only withdraws from keys with enough funds
+    for (const { source, recipient, amount } of transactions) {
+      if (source) {
+        balances[source] = balances[source] || 0;
+        balances[source] = balances[source] - amount;
+
+        if (balances[source] < 0) {
+          return false;
+        }
+      }
+
+      balances[recipient] = balances[recipient] || 0;
+      balances[recipient] = balances[recipient] + amount;
+    }
+  }
+  // Your code here
+
+  return true;
 };
 
 module.exports = {
